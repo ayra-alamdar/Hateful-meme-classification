@@ -87,6 +87,23 @@ def check_and_install_dependencies():
             except subprocess.CalledProcessError as e:
                 logging.error(f"Failed to install {requirement}: {str(e)}")
                 raise
+    
+    # Download required NLTK data
+    logging.info("Checking NLTK data...")
+    try:
+        import nltk
+        nltk_resources = ['punkt', 'wordnet']
+        for resource in nltk_resources:
+            try:
+                nltk.data.find(f'tokenizers/{resource}')
+                logging.info(f"✓ NLTK {resource} already downloaded")
+            except LookupError:
+                logging.info(f"Downloading NLTK {resource}...")
+                nltk.download(resource)
+                logging.info(f"✓ Successfully downloaded NLTK {resource}")
+    except Exception as e:
+        logging.error(f"Error downloading NLTK data: {str(e)}")
+        raise
 
 def prepare_dataset():
     """Prepare the dataset using kagglehub"""

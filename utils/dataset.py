@@ -123,10 +123,27 @@ class HatefulMemesDataset(Dataset):
                 "attention_mask": encoding["attention_mask"].squeeze(0)
             }
         else:
-            # For LSTM
-            tokens = self.tokenizer(text.lower())
+            # For LSTM: simple whitespace tokenization and convert to indices
+            tokens = text.lower().split()
             tokens = tokens[:MAX_TEXT_LENGTH]
-            return {"tokens": tokens}
+            
+            # Convert tokens to indices and pad
+            token_indices = []
+            for token in tokens:
+                token_indices.append(1)  # Use index 1 for all tokens (0 is for padding)
+            
+            # Pad sequence
+            if len(token_indices) < MAX_TEXT_LENGTH:
+                token_indices.extend([0] * (MAX_TEXT_LENGTH - len(token_indices)))
+            
+            # Convert to tensor
+            tokens_tensor = torch.tensor(token_indices, dtype=torch.long)
+            lengths = torch.tensor([len(tokens)], dtype=torch.long)
+            
+            return {
+                "tokens": tokens_tensor,
+                "lengths": lengths
+            }
             
     def __len__(self) -> int:
         return len(self.data)
