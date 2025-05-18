@@ -106,9 +106,9 @@ def prepare_dataset():
         dataset_path = Path(kagglehub.dataset_download("marafey/hateful-memes-dataset"))
         logging.info(f"Dataset downloaded to: {dataset_path}")
         
-        # Create images directory
-        images_dir = data_dir / "images"
-        images_dir.mkdir(exist_ok=True)
+        # Create img directory (not images - to match the JSONL files)
+        img_dir = data_dir / "img"
+        img_dir.mkdir(exist_ok=True)
         
         # Look for the img directory in possible locations
         possible_img_dirs = [
@@ -117,19 +117,19 @@ def prepare_dataset():
             dataset_path / "images"
         ]
         
-        img_dir = None
+        source_img_dir = None
         for dir_path in possible_img_dirs:
             if dir_path.exists() and dir_path.is_dir():
-                img_dir = dir_path
+                source_img_dir = dir_path
                 break
                 
-        if img_dir is None:
+        if source_img_dir is None:
             raise FileNotFoundError(f"Image directory not found in any of these locations: {[str(p) for p in possible_img_dirs]}")
             
         # Copy all images from img directory
-        logging.info(f"Copying images from {img_dir}")
-        for file_path in img_dir.glob("*.png"):
-            shutil.copy2(file_path, images_dir / file_path.name)
+        logging.info(f"Copying images from {source_img_dir}")
+        for file_path in source_img_dir.glob("*.png"):
+            shutil.copy2(file_path, img_dir / file_path.name)
             
         # Look for the JSONL files
         jsonl_files = ['train.jsonl', 'dev.jsonl', 'test.jsonl']
@@ -163,8 +163,8 @@ def prepare_dataset():
         if missing_files:
             raise FileNotFoundError(f"Missing required files: {missing_files}")
             
-        if not list(images_dir.glob("*.png")):
-            raise FileNotFoundError("No images were copied to the images directory")
+        if not list(img_dir.glob("*.png")):
+            raise FileNotFoundError("No images were copied to the img directory")
             
     except Exception as e:
         logging.error(f"Error preparing dataset: {str(e)}")
@@ -184,6 +184,19 @@ RESULTS_DIR.mkdir(exist_ok=True)
 def run_model_combination(model_type, text_model, image_model):
     """Run a single model combination and return its results."""
     try:
+        # Build vocabulary size for LSTM if needed
+        vocab_size = None
+        if text_model == 'lstm':
+            # Read training data to build vocabulary
+            with open('data/train.jsonl', 'r') as f:
+                texts = [json.loads(line)['text'] for line in f]
+            # Simple tokenization and vocabulary building
+            words = set()
+            for text in texts:
+                words.update(text.lower().split())
+            vocab_size = len(words) + 2  # +2 for <pad> and <unk>
+            logging.info(f"Built vocabulary with size: {vocab_size}")
+        
         cmd = [
             sys.executable,  # Use the same Python interpreter
             'train.py',
@@ -192,6 +205,10 @@ def run_model_combination(model_type, text_model, image_model):
             '--image_model', image_model,
             '--device', 'cuda' if torch.cuda.is_available() else 'cpu'
         ]
+        
+        # Add vocab_size if using LSTM
+        if vocab_size is not None:
+            cmd.extend(['--vocab_size', str(vocab_size)])
         
         logging.info(f"Running combination: {' '.join(cmd)}")
         
