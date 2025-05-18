@@ -255,7 +255,8 @@ def run_model_combination(model_type, text_model, image_model):
             '--model', model_type,
             '--text_model', text_model,
             '--image_model', image_model,
-            '--device', 'cuda' if torch.cuda.is_available() else 'cpu'
+            '--device', 'cuda' if torch.cuda.is_available() else 'cpu',
+            '--epochs', '2'  # Set epochs to 2
         ]
         
         # Add vocab_size if using LSTM
