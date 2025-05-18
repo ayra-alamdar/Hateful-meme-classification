@@ -103,9 +103,11 @@ class EarlyFusionModel(nn.Module):
                 image_dim=image_out_dim
             )
             
-        # Fusion MLP
+        # Fusion MLP - Adjust input dimension based on concatenated features
+        combined_dim = text_out_dim + image_out_dim  # 768 + 256 = 1024 for BERT, 256 + 256 = 512 for LSTM
+        
+        # Create MLP layers with proper dimensions
         layers = []
-        combined_dim = text_out_dim + image_out_dim  # This will be 1024 for BERT (768 + 256) or 512 for LSTM (256 + 256)
         prev_dim = combined_dim
         
         for dim in hidden_dims:
@@ -116,6 +118,7 @@ class EarlyFusionModel(nn.Module):
             ])
             prev_dim = dim
             
+        # Final classification layer
         layers.append(nn.Linear(prev_dim, num_classes))
         self.fusion_mlp = nn.Sequential(*layers)
         
@@ -132,8 +135,8 @@ class EarlyFusionModel(nn.Module):
             Tensor of shape [batch_size, num_classes]
         """
         # Get features from both modalities
-        text_features = self.text_processor(**text_data)
-        image_features = self.image_processor(image)
+        text_features = self.text_processor(**text_data)  # [batch_size, text_dim]
+        image_features = self.image_processor(image)      # [batch_size, image_dim]
         
         # Apply cross-modal attention if enabled
         if self.use_attention:
@@ -142,7 +145,7 @@ class EarlyFusionModel(nn.Module):
                 image_features
             )
             
-        # Concatenate features
+        # Concatenate features along feature dimension
         combined = torch.cat([text_features, image_features], dim=1)
         
         # Final classification
