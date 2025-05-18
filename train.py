@@ -35,6 +35,8 @@ def parse_args():
                       help='Learning rate')
     parser.add_argument('--device', type=str, default='cuda',
                       help='Device to use')
+    parser.add_argument('--vocab_size', type=int,
+                      help='Vocabulary size for LSTM model')
     return parser.parse_args()
 
 def train_epoch(model, dataloader, criterion, optimizer, device):
@@ -142,7 +144,8 @@ def main():
     model_class = EarlyFusionModel if args.model == 'early' else LateFusionModel
     model = model_class(
         text_model=args.text_model,
-        image_model=args.image_model
+        image_model=args.image_model,
+        vocab_size=args.vocab_size if args.text_model == 'lstm' else None
     ).to(device)
     
     # Setup training

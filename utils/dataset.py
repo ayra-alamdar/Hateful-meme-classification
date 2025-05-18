@@ -135,7 +135,14 @@ class HatefulMemesDataset(Dataset):
         row = self.data.iloc[idx]
         
         # Load and process image
-        image = Image.open(self.data_dir / row["img"]).convert("RGB")
+        # Extract just the filename from the image path and look in img directory
+        img_filename = Path(row["img"]).name
+        image_path = self.data_dir / "img" / img_filename
+        
+        if not image_path.exists():
+            raise FileNotFoundError(f"Image not found: {image_path}")
+            
+        image = Image.open(image_path).convert("RGB")
         if self.augment:
             image = self.aug_transform(image)
         image = self.transform(image)

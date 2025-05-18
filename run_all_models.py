@@ -93,14 +93,19 @@ def prepare_dataset():
     try:
         # First check if data already exists
         data_dir = Path("data")
-        if data_dir.exists() and (data_dir / "train.jsonl").exists():
-            logging.info("Dataset already exists, skipping download...")
-            return
+        data_dir.mkdir(exist_ok=True)
+        
+        # Check if dataset is already prepared
+        if (data_dir / "train.jsonl").exists() and (data_dir / "img").exists():
+            # Verify images exist
+            img_dir = data_dir / "img"
+            if list(img_dir.glob("*.png")):
+                logging.info("Dataset already exists and appears valid, skipping download...")
+                return
+            else:
+                logging.warning("Image directory exists but no images found. Re-downloading dataset...")
         
         logging.info("Downloading dataset using kagglehub...")
-        
-        # Create data directory
-        data_dir.mkdir(exist_ok=True)
         
         # Download dataset using kagglehub (no authentication needed for public datasets)
         dataset_path = Path(kagglehub.dataset_download("marafey/hateful-memes-dataset"))
@@ -114,7 +119,8 @@ def prepare_dataset():
         possible_img_dirs = [
             dataset_path / "img",
             dataset_path / "data" / "img",
-            dataset_path / "images"
+            dataset_path / "images",
+            dataset_path / "data" / "images"
         ]
         
         source_img_dir = None
@@ -124,12 +130,28 @@ def prepare_dataset():
                 break
                 
         if source_img_dir is None:
+            # Try to find any directory containing PNG files
+            for root, _, _ in os.walk(dataset_path):
+                root_path = Path(root)
+                if list(root_path.glob("*.png")):
+                    source_img_dir = root_path
+                    logging.info(f"Found images in: {root_path}")
+                    break
+                    
+        if source_img_dir is None:
             raise FileNotFoundError(f"Image directory not found in any of these locations: {[str(p) for p in possible_img_dirs]}")
             
         # Copy all images from img directory
         logging.info(f"Copying images from {source_img_dir}")
+        image_count = 0
         for file_path in source_img_dir.glob("*.png"):
             shutil.copy2(file_path, img_dir / file_path.name)
+            image_count += 1
+            
+        if image_count == 0:
+            raise FileNotFoundError("No images found to copy")
+            
+        logging.info(f"Copied {image_count} images")
             
         # Look for the JSONL files
         jsonl_files = ['train.jsonl', 'dev.jsonl', 'test.jsonl']
@@ -163,8 +185,21 @@ def prepare_dataset():
         if missing_files:
             raise FileNotFoundError(f"Missing required files: {missing_files}")
             
-        if not list(img_dir.glob("*.png")):
+        # Verify images
+        image_files = list(img_dir.glob("*.png"))
+        if not image_files:
             raise FileNotFoundError("No images were copied to the img directory")
+        else:
+            logging.info(f"Found {len(image_files)} images in the img directory")
+            
+        # Verify image paths in JSONL files
+        for jsonl_file in expected_files:
+            with open(data_dir / jsonl_file, 'r') as f:
+                for line in f:
+                    data = json.loads(line)
+                    img_path = img_dir / Path(data['img']).name
+                    if not img_path.exists():
+                        logging.warning(f"Missing image file: {img_path}")
             
     except Exception as e:
         logging.error(f"Error preparing dataset: {str(e)}")
