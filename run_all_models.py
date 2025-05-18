@@ -23,6 +23,42 @@ logging.basicConfig(
     ]
 )
 
+def check_environment():
+    """Check if the environment is properly set up."""
+    logging.info("Checking environment...")
+    
+    # Check CUDA availability
+    if torch.cuda.is_available():
+        logging.info(f"CUDA is available. Found device: {torch.cuda.get_device_name(0)}")
+    else:
+        logging.warning("CUDA is not available. Training will be done on CPU.")
+    
+    # Check Python version
+    logging.info(f"Python version: {sys.version}")
+    
+    # Check if we're in Google Colab
+    try:
+        import google.colab
+        logging.info("Running in Google Colab environment")
+        
+        # Check if we're connected to a GPU runtime
+        if not torch.cuda.is_available():
+            logging.warning("Running in Colab but no GPU detected. Please make sure to select GPU runtime.")
+    except ImportError:
+        logging.info("Not running in Google Colab environment")
+    
+    # Check current working directory and its contents
+    cwd = Path.cwd()
+    logging.info(f"Current working directory: {cwd}")
+    logging.info("Directory contents:")
+    for item in cwd.iterdir():
+        logging.info(f"  {item.name}")
+    
+    # Create necessary directories
+    for directory in ['data', 'checkpoints', 'results']:
+        Path(directory).mkdir(exist_ok=True)
+        logging.info(f"Created directory: {directory}")
+
 def check_and_install_dependencies():
     """Check and install required dependencies."""
     logging.info("Checking dependencies...")
@@ -164,23 +200,34 @@ def run_model_combination(model_type, text_model, image_model):
             cmd,
             capture_output=True,
             text=True,
-            check=True
+            check=False  # Don't raise exception immediately
         )
         
+        # Log the output regardless of success/failure
+        if process.stdout:
+            logging.info("Process output:")
+            logging.info(process.stdout)
+        
+        if process.stderr:
+            logging.error("Process errors:")
+            logging.error(process.stderr)
+            
+        # Now check if the process was successful
+        process.check_returncode()  # This will raise CalledProcessError if return code != 0
+        
+        # If we get here, the process was successful
         # Check if the process was successful
-        if process.returncode == 0:
-            # Load the best model results
-            checkpoint_path = Path('checkpoints') / f'best_{model_type}_{text_model}_{image_model}.pt'
-            if checkpoint_path.exists():
-                checkpoint = torch.load(checkpoint_path, map_location='cpu')
-                return {
-                    'model_type': model_type,
-                    'text_model': text_model,
-                    'image_model': image_model,
-                    'best_val_auroc': checkpoint['val_auroc'],
-                    'epoch': checkpoint['epoch'],
-                    'status': 'success'
-                }
+        checkpoint_path = Path('checkpoints') / f'best_{model_type}_{text_model}_{image_model}.pt'
+        if checkpoint_path.exists():
+            checkpoint = torch.load(checkpoint_path, map_location='cpu')
+            return {
+                'model_type': model_type,
+                'text_model': text_model,
+                'image_model': image_model,
+                'best_val_auroc': checkpoint['val_auroc'],
+                'epoch': checkpoint['epoch'],
+                'status': 'success'
+            }
         
         return {
             'model_type': model_type,
@@ -191,6 +238,22 @@ def run_model_combination(model_type, text_model, image_model):
             'status': 'failed'
         }
         
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Command failed with return code {e.returncode}")
+        if e.stdout:
+            logging.error("Process output:")
+            logging.error(e.stdout)
+        if e.stderr:
+            logging.error("Process errors:")
+            logging.error(e.stderr)
+        return {
+            'model_type': model_type,
+            'text_model': text_model,
+            'image_model': image_model,
+            'best_val_auroc': None,
+            'epoch': None,
+            'status': f'error: Command failed with return code {e.returncode}'
+        }
     except Exception as e:
         logging.error(f"Error running combination: {str(e)}")
         return {
@@ -204,6 +267,10 @@ def run_model_combination(model_type, text_model, image_model):
 
 def main():
     try:
+        # Environment and setup phase
+        logging.info("Starting environment check...")
+        check_environment()
+        
         # Setup phase
         logging.info("Starting setup phase...")
         check_and_install_dependencies()
