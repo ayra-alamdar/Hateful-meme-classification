@@ -67,22 +67,23 @@ def prepare_dataset():
         data_dir.mkdir(exist_ok=True)
         
         # Download dataset using kagglehub (no authentication needed for public datasets)
-        dataset_path = kagglehub.dataset_download("marafey/hateful-memes-dataset")
+        dataset_path = Path(kagglehub.dataset_download("marafey/hateful-memes-dataset"))
         logging.info(f"Dataset downloaded to: {dataset_path}")
         
-        # Move all files to data directory
-        dataset_path = Path(dataset_path)
-        for file_path in dataset_path.glob("*"):
-            if file_path.is_file():
-                shutil.copy2(file_path, data_dir / file_path.name)
-        
-        # Create images directory and move images
+        # Create images directory
         images_dir = data_dir / "images"
         images_dir.mkdir(exist_ok=True)
         
-        # Move all image files to images directory
-        for file in data_dir.glob("*.png"):
-            shutil.move(str(file), str(images_dir / file.name))
+        # Copy all PNG files to images directory
+        for file_path in dataset_path.glob("*.png"):
+            shutil.copy2(file_path, images_dir / file_path.name)
+            
+        # Copy labels.json to data directory
+        labels_file = dataset_path / "labels.json"
+        if labels_file.exists():
+            shutil.copy2(labels_file, data_dir / "labels.json")
+        else:
+            raise FileNotFoundError(f"labels.json not found in {dataset_path}")
         
         # Process annotations
         process_annotations(data_dir)
@@ -95,7 +96,11 @@ def prepare_dataset():
 def process_annotations(data_dir):
     """Process and split annotations."""
     # Read annotations
-    with open(data_dir / "labels.json", "r") as f:
+    labels_file = data_dir / "labels.json"
+    if not labels_file.exists():
+        raise FileNotFoundError(f"labels.json not found in {data_dir}")
+        
+    with open(labels_file, "r") as f:
         annotations = json.load(f)
     
     # Convert to list format if it's a dict
