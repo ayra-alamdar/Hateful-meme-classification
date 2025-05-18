@@ -70,20 +70,47 @@ def prepare_dataset():
         dataset_path = Path(kagglehub.dataset_download("marafey/hateful-memes-dataset"))
         logging.info(f"Dataset downloaded to: {dataset_path}")
         
+        # The actual data is in the 'data' subdirectory
+        source_data_dir = dataset_path / "data"
+        if not source_data_dir.exists():
+            source_data_dir = dataset_path  # Fallback to main directory if 'data' doesn't exist
+        
+        logging.info(f"Looking for dataset files in: {source_data_dir}")
+        
         # Create images directory
         images_dir = data_dir / "images"
         images_dir.mkdir(exist_ok=True)
         
         # Copy all PNG files to images directory
-        for file_path in dataset_path.glob("*.png"):
+        png_files = list(source_data_dir.glob("*.png"))
+        if not png_files:  # If no PNGs in root, check img directory
+            png_files = list((source_data_dir / "img").glob("*.png"))
+        
+        if not png_files:
+            raise FileNotFoundError(f"No PNG files found in {source_data_dir} or its subdirectories")
+            
+        for file_path in png_files:
             shutil.copy2(file_path, images_dir / file_path.name)
             
+        # Look for labels.json in possible locations
+        possible_label_locations = [
+            source_data_dir / "labels.json",
+            dataset_path / "labels.json",
+            source_data_dir / "data" / "labels.json"
+        ]
+        
+        labels_file = None
+        for loc in possible_label_locations:
+            if loc.exists():
+                labels_file = loc
+                break
+                
+        if labels_file is None:
+            raise FileNotFoundError(f"labels.json not found in any of these locations: {[str(p) for p in possible_label_locations]}")
+            
         # Copy labels.json to data directory
-        labels_file = dataset_path / "labels.json"
-        if labels_file.exists():
-            shutil.copy2(labels_file, data_dir / "labels.json")
-        else:
-            raise FileNotFoundError(f"labels.json not found in {dataset_path}")
+        shutil.copy2(labels_file, data_dir / "labels.json")
+        logging.info(f"Found and copied labels.json from: {labels_file}")
         
         # Process annotations
         process_annotations(data_dir)
