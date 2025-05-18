@@ -70,101 +70,69 @@ def prepare_dataset():
         dataset_path = Path(kagglehub.dataset_download("marafey/hateful-memes-dataset"))
         logging.info(f"Dataset downloaded to: {dataset_path}")
         
-        # The actual data is in the 'data' subdirectory
-        source_data_dir = dataset_path / "data"
-        if not source_data_dir.exists():
-            source_data_dir = dataset_path  # Fallback to main directory if 'data' doesn't exist
-        
-        logging.info(f"Looking for dataset files in: {source_data_dir}")
-        
         # Create images directory
         images_dir = data_dir / "images"
         images_dir.mkdir(exist_ok=True)
         
-        # Copy all PNG files to images directory
-        png_files = list(source_data_dir.glob("*.png"))
-        if not png_files:  # If no PNGs in root, check img directory
-            png_files = list((source_data_dir / "img").glob("*.png"))
-        
-        if not png_files:
-            raise FileNotFoundError(f"No PNG files found in {source_data_dir} or its subdirectories")
-            
-        for file_path in png_files:
-            shutil.copy2(file_path, images_dir / file_path.name)
-            
-        # Look for labels.json in possible locations
-        possible_label_locations = [
-            source_data_dir / "labels.json",
-            dataset_path / "labels.json",
-            source_data_dir / "data" / "labels.json"
+        # Look for the img directory in possible locations
+        possible_img_dirs = [
+            dataset_path / "img",
+            dataset_path / "data" / "img",
+            dataset_path / "images"
         ]
         
-        labels_file = None
-        for loc in possible_label_locations:
-            if loc.exists():
-                labels_file = loc
+        img_dir = None
+        for dir_path in possible_img_dirs:
+            if dir_path.exists() and dir_path.is_dir():
+                img_dir = dir_path
                 break
                 
-        if labels_file is None:
-            raise FileNotFoundError(f"labels.json not found in any of these locations: {[str(p) for p in possible_label_locations]}")
+        if img_dir is None:
+            raise FileNotFoundError(f"Image directory not found in any of these locations: {[str(p) for p in possible_img_dirs]}")
             
-        # Copy labels.json to data directory
-        shutil.copy2(labels_file, data_dir / "labels.json")
-        logging.info(f"Found and copied labels.json from: {labels_file}")
+        # Copy all images from img directory
+        logging.info(f"Copying images from {img_dir}")
+        for file_path in img_dir.glob("*.png"):
+            shutil.copy2(file_path, images_dir / file_path.name)
+            
+        # Look for the JSONL files
+        jsonl_files = ['train.jsonl', 'dev.jsonl', 'test.jsonl']
+        for jsonl_file in jsonl_files:
+            possible_locations = [
+                dataset_path / jsonl_file,
+                dataset_path / "data" / jsonl_file
+            ]
+            
+            file_found = False
+            for loc in possible_locations:
+                if loc.exists():
+                    shutil.copy2(loc, data_dir / jsonl_file)
+                    logging.info(f"Copied {jsonl_file} from {loc}")
+                    file_found = True
+                    break
+                    
+            if not file_found:
+                logging.warning(f"Could not find {jsonl_file} in any location")
         
-        # Process annotations
-        process_annotations(data_dir)
+        # Rename dev.jsonl to val.jsonl for consistency with our code
+        if (data_dir / "dev.jsonl").exists():
+            shutil.move(data_dir / "dev.jsonl", data_dir / "val.jsonl")
+            logging.info("Renamed dev.jsonl to val.jsonl")
         
         logging.info("Dataset preparation completed!")
+        
+        # Verify the dataset structure
+        expected_files = ["train.jsonl", "val.jsonl", "test.jsonl"]
+        missing_files = [f for f in expected_files if not (data_dir / f).exists()]
+        if missing_files:
+            raise FileNotFoundError(f"Missing required files: {missing_files}")
+            
+        if not list(images_dir.glob("*.png")):
+            raise FileNotFoundError("No images were copied to the images directory")
+            
     except Exception as e:
         logging.error(f"Error preparing dataset: {str(e)}")
         raise
-
-def process_annotations(data_dir):
-    """Process and split annotations."""
-    # Read annotations
-    labels_file = data_dir / "labels.json"
-    if not labels_file.exists():
-        raise FileNotFoundError(f"labels.json not found in {data_dir}")
-        
-    with open(labels_file, "r") as f:
-        annotations = json.load(f)
-    
-    # Convert to list format if it's a dict
-    if isinstance(annotations, dict):
-        annotations = [
-            {"id": k, **v} for k, v in annotations.items()
-        ]
-    
-    # Sort by id for reproducibility
-    annotations.sort(key=lambda x: x["id"])
-    
-    # Calculate split sizes
-    total = len(annotations)
-    train_size = int(0.7 * total)
-    val_size = int(0.15 * total)
-    
-    # Split data
-    train_data = annotations[:train_size]
-    val_data = annotations[train_size:train_size + val_size]
-    test_data = annotations[train_size + val_size:]
-    
-    # Save splits
-    splits = {
-        "train": train_data,
-        "val": val_data,
-        "test": test_data
-    }
-    
-    for split_name, split_data in splits.items():
-        output_file = data_dir / f"{split_name}.jsonl"
-        with open(output_file, "w") as f:
-            for item in split_data:
-                # Add image path
-                item["img"] = f"images/{item['id']}.png"
-                f.write(json.dumps(item) + "\n")
-    
-    logging.info(f"Data split into: train({len(train_data)}), val({len(val_data)}), test({len(test_data)})")
 
 # Define all possible combinations
 COMBINATIONS = {
