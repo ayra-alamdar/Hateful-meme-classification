@@ -9,8 +9,8 @@ import logging
 import sys
 import pkg_resources
 import os
-from importlib import import_module
 import shutil
+from tqdm import tqdm
 import kagglehub
 
 # Setup logging
@@ -31,9 +31,11 @@ def check_and_install_dependencies():
     with open('requirements.txt', 'r') as f:
         requirements = [line.strip() for line in f if line.strip() and not line.startswith('#')]
     
-    # Add kagglehub to requirements if not present
-    if not any('kagglehub' in req for req in requirements):
-        requirements.append('kagglehub')
+    # Add required packages for download
+    additional_requirements = ['kagglehub']
+    for req in additional_requirements:
+        if not any(req in r for r in requirements):
+            requirements.append(req)
     
     # Check each requirement
     for requirement in requirements:
@@ -61,15 +63,16 @@ def prepare_dataset():
         
         logging.info("Downloading dataset using kagglehub...")
         
-        # Download dataset
-        dataset_path = kagglehub.dataset_download("marafey/hateful-memes-dataset")
-        logging.info(f"Dataset downloaded to: {dataset_path}")
-        
         # Create data directory
         data_dir.mkdir(exist_ok=True)
         
+        # Download dataset using kagglehub (no authentication needed for public datasets)
+        dataset_path = kagglehub.dataset_download("marafey/hateful-memes-dataset")
+        logging.info(f"Dataset downloaded to: {dataset_path}")
+        
         # Move all files to data directory
-        for file_path in Path(dataset_path).glob("*"):
+        dataset_path = Path(dataset_path)
+        for file_path in dataset_path.glob("*"):
             if file_path.is_file():
                 shutil.copy2(file_path, data_dir / file_path.name)
         
