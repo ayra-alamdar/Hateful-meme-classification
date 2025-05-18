@@ -82,7 +82,7 @@ class EarlyFusionModel(nn.Module):
         # Initialize text processor
         if text_model == "bert":
             self.text_processor = BERTTextProcessor()
-            text_out_dim = 768
+            text_out_dim = 768  # BERT hidden size
         else:
             assert vocab_size is not None, "vocab_size required for LSTM"
             self.text_processor = LSTMTextProcessor(vocab_size)
@@ -105,7 +105,8 @@ class EarlyFusionModel(nn.Module):
             
         # Fusion MLP
         layers = []
-        prev_dim = text_out_dim + image_out_dim
+        combined_dim = text_out_dim + image_out_dim  # This will be 1024 for BERT (768 + 256) or 512 for LSTM (256 + 256)
+        prev_dim = combined_dim
         
         for dim in hidden_dims:
             layers.extend([

@@ -36,7 +36,7 @@ IMAGE_MODELS = {
 
 FUSION_CONFIG = {
     "early": {
-        "hidden_dims": [512, 256],
+        "hidden_dims": [768, 512, 256],
         "dropout": 0.3
     },
     "late": {
