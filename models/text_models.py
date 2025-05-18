@@ -48,10 +48,15 @@ class LSTMTextProcessor(nn.Module):
         # Embed tokens
         embedded = self.dropout(self.embedding(tokens))
         
+        # Ensure lengths is the right shape and on CPU
+        if lengths.dim() == 0:
+            lengths = lengths.unsqueeze(0)
+        lengths = lengths.view(-1).cpu()
+        
         # Pack sequence for LSTM
         packed = nn.utils.rnn.pack_padded_sequence(
             embedded,
-            lengths.cpu(),
+            lengths,
             batch_first=True,
             enforce_sorted=False
         )
